@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal DMA Simulator</title>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+</head>
+<body style="font-family: Arial; max-width: 800px; margin: 40px auto; padding: 20px; background: #1a1a1a; color: #00ff88">
+    <h1>✅ MINIMAL DMA SIMULATOR - WORKING</h1>
+    <p>Upload not needed - simulation uses hardcoded 1MB file</p>
+    
+    <div style="margin: 20px 0">
+        <button id="cpu-btn" style="padding:10px 20px; background:#333; color:#00ccff; border:none; cursor:pointer">CPU Mode</button>
+        <button id="dma-btn" style="padding:10px 20px; background:#333; color:#00ff88; border:none; cursor:pointer">DMA Mode</button>
+        <button id="start-btn" style="padding:10px 20px; background:#00ff88; color:#000; border:none; font-weight:bold; cursor:pointer">▶ START TRANSFER</button>
+    </div>
+    
+    <div id="progress" style="width:100%; height:30px; background:#333; margin:20px 0; border-radius:15px; overflow:hidden">
+        <div id="progress-fill" style="width:0%; height:100%; background:linear-gradient(90deg, #00ccff, #00ff88); transition:width 0.1s"></div>
+    </div>
+    
+    <div id="log" style="background:#0a0a0a; padding:15px; border-radius:10px; height:300px; overflow-y:auto; font-family:monospace; font-size:14px"></div>
+    
+    <script>
+        const socket = io();
+        let mode = 'cpu';
+        
+        document.getElementById('cpu-btn').onclick = () => { mode = 'cpu'; log('Mode: CPU'); };
+        document.getElementById('dma-btn').onclick = () => { mode = 'dma'; log('Mode: DMA'); };
+        
+        document.getElementById('start-btn').onclick = () => {
+            log('🚀 Starting ' + mode.toUpperCase() + ' simulation...');
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('progress-fill').style.width = '0%';
+            socket.emit('start_transfer', { mode: mode, file_size: 1048576, file_type: 'document' });
+        };
+        
+        socket.on('connect', () => log('✅ Connected to server'));
+        socket.on('transfer_metrics', (data) => {
+            document.getElementById('progress-fill').style.width = data.progress + '%';
+            if (data.progress % 10 === 0) log(`📊 ${data.progress}% - CPU: ${data.cpu_utilization}%`);
+        });
+        socket.on('transfer_complete', (data) => {
+            log(`✅ Complete! Time: ${data.total_time}s, Efficiency: ${data.efficiency}%`);
+            document.getElementById('start-btn').disabled = false;
+        });
+        
+        function log(msg) {
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            document.getElementById('log').appendChild(div);
+            document.getElementById('log').scrollTop = 99999;
+        }
+        log('System ready. Click START to begin simulation.');
+    </script>
+</body>
+</html>

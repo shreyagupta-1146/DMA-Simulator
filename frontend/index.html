@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMA Controller Simulator - Advanced System Monitor</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Top Navigation Bar -->
+    <nav class="top-nav">
+        <div class="nav-left">
+            <div class="app-icon">
+                <i class="fas fa-microchip"></i>
+            </div>
+            <div class="app-title">
+                <h1>DMA CONTROLLER SIMULATOR</h1>
+                <p>Advanced System Performance Monitor</p>
+            </div>
+        </div>
+        <div class="nav-right">
+            <div class="system-info-badge">
+                <i class="fas fa-laptop"></i>
+                <span id="system-name">Windows 11 Pro</span>
+            </div>
+            <div class="system-info-badge">
+                <i class="fas fa-microchip"></i>
+                <span id="cpu-info">4 Cores</span>
+            </div>
+            <div class="status-indicator">
+                <span class="status-dot status-idle"></span>
+                <span id="system-status-text">IDLE</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3><i class="fas fa-cog"></i> Configuration</h3>
+            </div>
+            
+            <!-- File Upload Section -->
+            <div class="sidebar-section">
+                <h4><i class="fas fa-file-upload"></i> File Upload</h4>
+                <div class="file-upload-container">
+                    <div class="file-drop-area" id="file-drop-area">
+                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                        <p>Drag & Drop File Here</p>
+                        <p class="upload-hint">or</p>
+                        <button class="browse-btn" id="browse-btn">
+                            <i class="fas fa-folder-open"></i>
+                            Browse Files
+                        </button>
+                        <input type="file" id="file-input" hidden accept="*/*">
+                    </div>
+                    <div class="file-info" id="file-info" style="display: none;">
+                        <div class="file-icon">
+                            <i class="fas fa-file" id="file-type-icon"></i>
+                        </div>
+                        <div class="file-details">
+                            <div class="file-name" id="file-name">No file selected</div>
+                            <div class="file-meta">
+                                <span id="file-size">0 KB</span> • 
+                                <span id="file-type">Unknown</span>
+                            </div>
+                        </div>
+                        <button class="remove-file-btn" id="remove-file-btn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OS Selection -->
+            <div class="sidebar-section">
+                <h4><i class="fas fa-desktop"></i> Operating System</h4>
+                <div class="os-grid">
+                    <div class="os-card active" data-os="windows" title="Windows 11 Pro - Multilevel Queue Scheduler">
+                        <div class="os-icon">🪟</div>
+                        <div class="os-name">Windows</div>
+                        <div class="os-spec">133 MB/s</div>
+                    </div>
+                    <div class="os-card" data-os="linux" title="Ubuntu 22.04 - Completely Fair Scheduler (CFS)">
+                        <div class="os-icon">🐧</div>
+                        <div class="os-name">Linux</div>
+                        <div class="os-spec">200 MB/s</div>
+                    </div>
+                    <div class="os-card" data-os="macos" title="macOS Sonoma - Mach Kernel Scheduler">
+                        <div class="os-icon">🍎</div>
+                        <div class="os-name">macOS</div>
+                        <div class="os-spec">166 MB/s</div>
+                    </div>
+                    <div class="os-card" data-os="android" title="Android 14 - EAS Scheduler">
+                        <div class="os-icon">🤖</div>
+                        <div class="os-name">Android</div>
+                        <div class="os-spec">100 MB/s</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transfer Mode -->
+            <div class="sidebar-section">
+                <h4><i class="fas fa-exchange-alt"></i> Transfer Mode</h4>
+                <div class="mode-toggle">
+                    <button class="mode-btn active" data-mode="cpu" title="CPU handles all data transfer - High overhead">
+                        <i class="fas fa-microchip"></i>
+                        <span>CPU Only</span>
+                        <span class="mode-desc">High CPU Load</span>
+                    </button>
+                    <button class="mode-btn" data-mode="dma" title="DMA controller handles transfer - Low CPU overhead">
+                        <i class="fas fa-bolt"></i>
+                        <span>DMA Assisted</span>
+                        <span class="mode-desc">Low CPU Overhead</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Specifications -->
+            <div class="sidebar-section specs-card">
+                <h4><i class="fas fa-info-circle"></i> System Specifications</h4>
+                <div class="spec-item">
+                    <span class="spec-label">Scheduler:</span>
+                    <span class="spec-value" id="scheduler-type">Multilevel Queue</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">DMA Channels:</span>
+                    <span class="spec-value">4</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">DMA Priority:</span>
+                    <span class="spec-value" id="dma-priority">High</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Context Switch:</span>
+                    <span class="spec-value" id="context-switch">1200 cycles</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Max Bandwidth:</span>
+                    <span class="spec-value" id="max-bandwidth">133 MB/s</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">CPU Cores:</span>
+                    <span class="spec-value" id="cpu-cores-spec">4</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Clock Speed:</span>
+                    <span class="spec-value" id="clock-speed">2.8 GHz</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="sidebar-footer">
+                <button class="btn btn-primary btn-lg" id="start-transfer" disabled>
+                    <i class="fas fa-play"></i>
+                    <span>START TRANSFER</span>
+                </button>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="pause-transfer" disabled>
+                        <i class="fas fa-pause"></i>
+                        Pause
+                    </button>
+                    <button class="btn btn-danger" id="stop-transfer" disabled>
+                        <i class="fas fa-stop"></i>
+                        Stop
+                    </button>
+                </div>
+                <button class="btn btn-outline" id="reset-all">
+                    <i class="fas fa-redo"></i>
+                    Reset
+                </button>
+            </div>
+        </aside>
+                <!-- Main Content Area -->
+        <main class="content-area">
+            <!-- Performance Summary Cards -->
+            <div class="summary-grid">
+                <div class="summary-card cpu-card">
+                    <div class="card-icon">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-title">CPU Utilization</div>
+                        <div class="card-value" id="cpu-util-value">0%</div>
+                        <div class="card-subtitle">Current Load</div>
+                    </div>
+                </div>
+                <div class="summary-card dma-card">
+                    <div class="card-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-title">DMA Utilization</div>
+                        <div class="card-value" id="dma-util-value">0%</div>
+                        <div class="card-subtitle">Channel Activity</div>
+                    </div>
+                </div>
+                <div class="summary-card bus-card">
+                    <div class="card-icon">
+                        <i class="fas fa-network-wired"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-title">Bus Utilization</div>
+                        <div class="card-value" id="bus-util-value">0%</div>
+                        <div class="card-subtitle">Memory Bus</div>
+                    </div>
+                </div>
+                <div class="summary-card throughput-card">
+                    <div class="card-icon">
+                        <i class="fas fa-tachometer-alt"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-title">Throughput</div>
+                        <div class="card-value" id="throughput-value">0 MB/s</div>
+                        <div class="card-subtitle">Data Transfer Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="charts-section">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-line"></i> CPU Utilization</h3>
+                        <div class="chart-tooltip" id="cpu-tooltip">
+                            <div class="tooltip-content">
+                                <div class="tooltip-label">CPU Cycles:</div>
+                                <div class="tooltip-value" id="cpu-cycles-tooltip">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <canvas id="cpu-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-line"></i> DMA Utilization</h3>
+                        <div class="chart-tooltip" id="dma-tooltip">
+                            <div class="tooltip-content">
+                                <div class="tooltip-label">Active Channels:</div>
+                                <div class="tooltip-value" id="dma-channels-tooltip">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <canvas id="dma-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-line"></i> Bus Utilization</h3>
+                        <div class="chart-tooltip" id="bus-tooltip">
+                            <div class="tooltip-content">
+                                <div class="tooltip-label">Bandwidth:</div>
+                                <div class="tooltip-value" id="bus-bandwidth-tooltip">0 MB/s</div>
+                            </div>
+                        </div>
+                    </div>
+                    <canvas id="bus-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-line"></i> Transfer Throughput</h3>
+                        <div class="chart-tooltip" id="throughput-tooltip">
+                            <div class="tooltip-content">
+                                <div class="tooltip-label">Speed:</div>
+                                <div class="tooltip-value" id="throughput-speed-tooltip">0 MB/s</div>
+                            </div>
+                        </div>
+                    </div>
+                    <canvas id="throughput-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Transfer Progress Section -->
+            <div class="transfer-section">
+                <div class="transfer-header">
+                    <h3><i class="fas fa-sync-alt"></i> Transfer Progress</h3>
+                    <div class="transfer-stats">
+                        <div class="stat-badge">
+                            <i class="fas fa-file"></i>
+                            <span id="transferred-mb">0 MB</span>
+                            <small>/ <span id="total-size">0 MB</span></small>
+                        </div>
+                        <div class="stat-badge">
+                            <i class="fas fa-clock"></i>
+                            <span id="elapsed-time">0.0s</span>
+                            <small>Elapsed</small>
+                        </div>
+                        <div class="stat-badge mode-badge" id="current-mode-badge">
+                            <i class="fas fa-microchip"></i>
+                            <span>CPU</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                        <span class="progress-text" id="progress-text">0%</span>
+                    </div>
+                </div>
+                <div class="transfer-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Current Speed:</span>
+                        <span class="detail-value" id="current-speed">0 MB/s</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Estimated Time:</span>
+                        <span class="detail-value" id="estimated-time">--</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Chunks Processed:</span>
+                        <span class="detail-value" id="chunks-processed">0/0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Metrics Section -->
+            <div class="metrics-section">
+                <div class="metrics-card">
+                    <h4><i class="fas fa-calculator"></i> CPU Cycles Analysis</h4>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-label">Current Cycles</div>
+                            <div class="metric-value" id="current-cycles">0</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Total Cycles</div>
+                            <div class="metric-value" id="total-cycles">0</div>
+                        </div>
+                        <div class="metric-item highlight">
+                            <div class="metric-label">Efficiency</div>
+                            <div class="metric-value" id="efficiency-value">0%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Context Switches</div>
+                            <div class="metric-value" id="context-switches">0</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Instructions</div>
+                            <div class="metric-value" id="instruction-count">0</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">CPI</div>
+                            <div class="metric-value" id="cycles-per-instruction">0.00</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="metrics-card comparison-card">
+                    <h4><i class="fas fa-chart-bar"></i> Performance Comparison</h4>
+                    <canvas id="comparison-chart"></canvas>
+                    <div class="comparison-stats" id="comparison-stats" style="display: none;">
+                        <div class="stat-row">
+                            <span>Time Saved:</span>
+                            <span id="time-saved">--</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Cycles Saved:</span>
+                            <span id="cycles-saved">--</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Throughput Gain:</span>
+                            <span id="throughput-gain">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Section -->
+            <div class="analytics-section" id="analytics-section" style="display: none;">
+                <div class="analytics-card">
+                    <h4><i class="fas fa-chart-pie"></i> Performance Analytics</h4>
+                    <div class="analytics-grid">
+                        <div class="analytics-item">
+                            <div class="analytics-label">Efficiency Score</div>
+                            <div class="analytics-value" id="efficiency-score">--</div>
+                            <div class="analytics-desc">Out of 100</div>
+                        </div>
+                        <div class="analytics-item">
+                            <div class="analytics-label">Bottleneck</div>
+                            <div class="analytics-value" id="bottleneck">--</div>
+                            <div class="analytics-desc" id="bottleneck-desc">--</div>
+                        </div>
+                        <div class="analytics-item">
+                            <div class="analytics-label">Recommendation</div>
+                            <div class="analytics-value" id="recommendation">--</div>
+                            <div class="analytics-desc" id="recommendation-priority">--</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="recommendations-card">
+                    <h4><i class="fas fa-lightbulb"></i> Recommendations</h4>
+                    <ul class="recommendations-list" id="recommendations-list">
+                        <li>Run both CPU and DMA simulations to generate recommendations</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- System Log -->
+            <div class="log-section">
+                <div class="log-header">
+                    <h4><i class="fas fa-terminal"></i> System Log</h4>
+                    <div class="log-controls">
+                        <button class="btn btn-sm" id="clear-log">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                        <button class="btn btn-sm" id="export-log">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                        <select class="log-level" id="log-level">
+                            <option value="all">All Levels</option>
+                            <option value="info">Info Only</option>
+                            <option value="warning">Warnings</option>
+                            <option value="error">Errors Only</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="log-content" id="log-content">
+                    <div class="log-entry info">
+                        <span class="log-time">[00:00:00]</span>
+                        <span class="log-message">System initialized. Ready for transfer.</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for File Details -->
+    <div class="modal" id="file-details-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>File Details</h3>
+                <button class="close-modal" id="close-file-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-detail-row">
+                    <span class="detail-label">Name:</span>
+                    <span class="detail-value" id="modal-file-name">--</span>
+                </div>
+                <div class="file-detail-row">
+                    <span class="detail-label">Size:</span>
+                    <span class="detail-value" id="modal-file-size">--</span>
+                </div>
+                <div class="file-detail-row">
+                    <span class="detail-label">Type:</span>
+                    <span class="detail-value" id="modal-file-type">--</span>
+                </div>
+                <div class="file-detail-row">
+                    <span class="detail-label">Complexity:</span>
+                    <span class="detail-value" id="modal-file-complexity">--</span>
+                </div>
+                <div class="file-detail-row">
+                    <span class="detail-label">Hash:</span>
+                    <span class="detail-value" id="modal-file-hash">--</span>
+                </div>
+                <div class="file-detail-row">
+                    <span class="detail-label">Estimated Transfer Time (CPU):</span>
+                    <span class="detail-value" id="modal-estimated-cpu">--</span>
+                </div>
+                <div class="file-detail-row">
+                    <span class="detail-label">Estimated Transfer Time (DMA):</span>
+                    <span class="detail-value" id="modal-estimated-dma">--</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="close-file-details">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/file_upload.js"></script>
+</body>
+</html>
