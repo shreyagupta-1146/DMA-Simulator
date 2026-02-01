@@ -32,6 +32,7 @@ socketio.emit = debug_emit
 
 # Global state
 simulation_active = False
+simulation_paused = False
 current_file_info = None
 
 # System profiles (minimal but complete)
@@ -290,8 +291,8 @@ def handle_transfer(data):
                 throughput = profile['max_dma_bandwidth'] * 0.9
                 cycles = int(2000 + (chunk * 200))
             
-            # Emit metrics to frontend
-            socketio.emit('transfer_metrics', {
+            # Emit metrics to frontend - FIXED EVENT NAME
+            socketio.emit('simulation_update', {
                 'progress': progress,
                 'cpu_utilization': cpu_util,
                 'dma_utilization': dma_util,
@@ -305,19 +306,36 @@ def handle_transfer(data):
                 'total_chunks': total_chunks
             })
             
+            # Yield to other events and handle pause
             socketio.sleep(base_delay)
+            while simulation_paused and simulation_active:
+                socketio.sleep(0.1)
         
+        if not simulation_active:
+            socketio.emit('simulation_stopped')
+            return
+
         # Simulation complete
         total_time = total_chunks * base_delay
         total_cycles = 5000000 if mode == 'cpu' else 220000
         efficiency = 95 - (complexity * 2) if mode == 'dma' else 40 - (complexity * 3)
         
-        socketio.emit('transfer_complete', {
+        socketio.emit('simulation_complete', {
             'total_time': total_time,
             'efficiency': efficiency,
             'total_cycles': total_cycles,
             'throughput_mbps': throughput,
-            'mode': mode
+            'mode': mode,
+            'cpu_stats': {
+                'active_percentage': efficiency,
+                'context_switches': 120,
+                'instruction_count': 500000,
+                'cycles_per_instruction': 1.2
+            },
+            'dma_stats': {
+                'avg_dma_utilization': efficiency if mode == 'dma' else 0,
+                'total_cycles_saved': total_cycles if mode == 'dma' else 0
+            }
         })
         
         simulation_active = False
@@ -326,11 +344,27 @@ def handle_transfer(data):
     threading.Thread(target=run_simulation, daemon=True).start()
 
 @socketio.on('stop_transfer')
+@socketio.on('stop_simulation')
 def handle_stop():
-    global simulation_active
+    global simulation_active, simulation_paused
     simulation_active = False
-    emit('transfer_stopped', {'status': 'stopped'})
+    simulation_paused = False
+    emit('simulation_stopped', {'status': 'stopped'})
     print("⏹️ Transfer stopped by user")
+
+@socketio.on('pause_simulation')
+def handle_pause():
+    global simulation_paused
+    simulation_paused = True
+    emit('simulation_paused', {'status': 'paused'})
+    print("⏸️ Simulation paused")
+
+@socketio.on('resume_simulation')
+def handle_resume():
+    global simulation_paused
+    simulation_paused = False
+    emit('simulation_resumed', {'status': 'resumed'})
+    print("▶️ Simulation resumed")
 
 if __name__ == '__main__':
     os.makedirs('uploads', exist_ok=True)
