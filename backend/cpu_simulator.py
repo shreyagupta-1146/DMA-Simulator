@@ -39,16 +39,17 @@ class CPUSimulator:
         
         total_cycles = cycles_for_transfer + memory_access_overhead + io_overhead
         
-        # CPU utilization is very high (80-98%)
-        base_utilization = 80 + random.uniform(0, 18)
-        cpu_utilization = min(98, base_utilization * file_complexity)
+        # CPU utilization is very high (80-98%) with high jitter
+        base_utilization = 82 + random.uniform(-10, 15)
+        cpu_utilization = min(99.5, base_utilization * file_complexity)
         
         # Bus utilization (CPU monopolizes the bus)
-        bus_utilization = min(95, 75 + random.uniform(-5, 20) * file_complexity)
+        bus_utilization = min(98, 70 + random.uniform(-20, 25) * file_complexity)
         
         # Track statistics
-        self.total_cycles += total_cycles
-        self.active_cycles += total_cycles
+        setup_cost = random.randint(1000, 3000) # Base setup for each chunk
+        self.total_cycles += (total_cycles + setup_cost)
+        self.active_cycles += (total_cycles + setup_cost)
         self.instruction_count += int(chunk_size * 1.5)
         
         # Record cycle data
@@ -78,8 +79,9 @@ class CPUSimulator:
         # CPU performs context switch
         self.context_switches += 1
         
-        # CPU utilization is very low (5-25%)
-        cpu_utilization = min(25, (5 + random.uniform(0, 20)) * file_complexity)
+        # CPU utilization is very low with high jitter
+        base_util = 8 + random.uniform(-4, 12)
+        cpu_utilization = min(35, base_util * file_complexity)
         
         # Track statistics
         self.total_cycles += setup_cycles

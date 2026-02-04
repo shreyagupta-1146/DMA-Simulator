@@ -27,15 +27,23 @@ class SimulationEngine:
         self.end_time = None
         self.callback = None
         
-        # Simulation parameters
-        self.chunk_size = 4096  # 4KB chunks
-        self.update_interval = system_profile['transfer_delay']
+        # New parameters
+        self.sim_speed = 1.0
+        self.bus_width = 32
+        self.interrupt_triggered = False
+        self.last_metrics = {} # To store instant values for charts
         
-    def start_simulation(self, mode='cpu', callback=None):
+        # Simulation parameters
+        self.chunk_size = 1024  # 1KB chunks for better granularity
+        self.base_delay = system_profile['transfer_delay']
+        
+    def start_simulation(self, mode='cpu', sim_speed=1.0, bus_width=32, callback=None):
         """
-        Start the simulation in a separate thread
+        Start the simulation with speed and bus width considerations
         """
         self.mode = mode
+        self.sim_speed = sim_speed
+        self.bus_width = bus_width
         self.active = True
         self.paused = False
         self.current_chunk = 0
@@ -44,7 +52,8 @@ class SimulationEngine:
         self.callback = callback
         
         # Calculate total chunks
-        self.total_chunks = max(1, self.file_processor.file_size // self.chunk_size)
+        self.total_chunks = max(10, self.file_processor.file_size // self.chunk_size)
+        if self.total_chunks > 200: self.total_chunks = 200 # Cap for UI performance
         
         # Start simulation in background thread
         thread = threading.Thread(target=self._run_simulation)
@@ -62,6 +71,15 @@ class SimulationEngine:
                 time.sleep(0.1)
                 continue
             
+            # Handle Interrupt
+            delay_modifier = 1.0
+            if self.interrupt_triggered:
+                if self.mode == 'cpu':
+                    delay_modifier = 8.0 # Critical lag
+                else:
+                    delay_modifier = 2.0 # Minor lag
+                self.interrupt_triggered = False
+            
             # Process one chunk
             self._process_chunk()
             
@@ -71,7 +89,10 @@ class SimulationEngine:
                 self.callback(metrics)
             
             # Wait for next update
-            time.sleep(self.update_interval)
+            # Variable delay to prevent perfectly flat lines
+            jitter = random.uniform(0.8, 1.2)
+            wait_time = (self.base_delay / self.sim_speed) * delay_modifier * jitter
+            time.sleep(max(0.005, wait_time))
         
         # Simulation complete
         self.active = False
@@ -84,35 +105,67 @@ class SimulationEngine:
     
     def _process_chunk(self):
         """
-        Process a single chunk based on mode
+        Process a single chunk and store instant metrics for the graph
         """
         file_type = self.file_processor.file_type
         
-        if self.mode == 'cpu':
-            # CPU-only transfer: high CPU usage
-            metrics = self.cpu_simulator.process_chunk_cpu(self.chunk_size, file_type)
-            dma_util = 0
-            bus_util = metrics['bus_utilization']
-        else:
-            # DMA-assisted transfer: low CPU usage
-            dma_metrics = self.dma_controller.transfer_chunk(self.chunk_size, file_type)
-            metrics = self.cpu_simulator.process_chunk_dma(file_type)
-            dma_util = dma_metrics['dma_utilization']
-            bus_util = dma_metrics['bus_utilization']
+        # Calculate real chunk size based on total iterations
+        # Use floating point to avoid zero-chunking for small files
+        actual_chunk_size = self.file_processor.file_size / self.total_chunks
         
-        self.bytes_transferred += self.chunk_size
+        # Bus width factor (32-bit is standard 1.0)
+        bus_factor = 32 / self.bus_width
+        
+        if self.mode == 'cpu':
+            metrics = self.cpu_simulator.process_chunk_cpu(actual_chunk_size, file_type)
+            # Adjust cycles by bus width
+            extra_cycles = int(metrics['cycles_used'] * (bus_factor - 1))
+            self.cpu_simulator.total_cycles += extra_cycles
+            self.cpu_simulator.active_cycles += extra_cycles
+            self.last_metrics = {
+                'cpu_util': metrics['cpu_utilization'],
+                'bus_util': metrics['bus_utilization'],
+                'dma_util': 0
+            }
+        else:
+            dma_metrics = self.dma_controller.transfer_chunk(actual_chunk_size, file_type)
+            cpu_metrics = self.cpu_simulator.process_chunk_dma(file_type)
+            self.last_metrics = {
+                'cpu_util': cpu_metrics['cpu_utilization'],
+                'bus_util': dma_metrics['bus_utilization'],
+                'dma_util': dma_metrics['dma_utilization']
+            }
+        
+        self.bytes_transferred += actual_chunk_size
         self.current_chunk += 1
     
+    def trigger_interrupt(self):
+        """Simulate a hardware interrupt"""
+        self.interrupt_triggered = True
+
     def _get_current_metrics(self):
         """
-        Get current simulation metrics
+        Get current simulation metrics (Instant for charts, Avg for labels)
         """
         elapsed = time.time() - self.start_time if self.start_time else 0
         progress = min(100, (self.bytes_transferred / self.file_processor.file_size) * 100)
-        throughput = (self.bytes_transferred / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+        
+        # LOGICAL THROUGHPUT: Based on hardware specs, not wall-clock speed
+        # CPU mode is typically 30-50% slower than DMA path
+        mode_efficiency = 0.45 if self.mode == 'cpu' else 0.92
+        
+        # Factors: OS Max Bandwidth * Mode Efficiency * Bus Width Factor
+        bus_boost = self.bus_width / 32
+        base_throughput = self.system_profile['max_dma_bandwidth'] * mode_efficiency * bus_boost
+        
+        jitter = random.uniform(0.85, 1.15) 
+        throughput = base_throughput * jitter
         
         cpu_stats = self.cpu_simulator.get_statistics()
-        dma_stats = self.dma_controller.get_statistics() if self.mode == 'dma' else {}
+        #dma_stats = self.dma_controller.get_statistics() if self.mode == 'dma' else {} # Not needed for instant
+        
+        # Use a minimum of cycles even for small simulations
+        total_cycles = max(cpu_stats['total_cycles'], self.current_chunk * 1500)
         
         return {
             'progress': round(progress, 2),
@@ -120,10 +173,11 @@ class SimulationEngine:
             'bytes_transferred': self.bytes_transferred,
             'mb_transferred': round(self.bytes_transferred / (1024 * 1024), 2),
             'throughput_mbps': round(throughput, 2),
-            'cpu_utilization': cpu_stats['active_percentage'],
-            'dma_utilization': dma_stats.get('avg_dma_utilization', 0),
-            'bus_utilization': dma_stats.get('avg_bus_utilization', cpu_stats['active_percentage']),
-            'total_cycles': cpu_stats['total_cycles'],
+            # VIBRANT GRAPHS: Use last_metrics (instant) instead of stats (average)
+            'cpu_utilization': round(self.last_metrics.get('cpu_util', 0), 1),
+            'dma_utilization': round(self.last_metrics.get('dma_util', 0), 1),
+            'bus_utilization': round(self.last_metrics.get('bus_util', 0), 1),
+            'total_cycles': total_cycles,
             'mode': self.mode,
             'chunk': self.current_chunk,
             'total_chunks': self.total_chunks,
@@ -131,27 +185,25 @@ class SimulationEngine:
         }
     
     def _get_final_metrics(self):
-        """
-        Get final simulation metrics
-        """
         total_time = self.end_time - self.start_time if self.start_time and self.end_time else 0
-        total_mb = self.file_processor.file_size / (1024 * 1024)
-        throughput = total_mb / total_time if total_time > 0 else 0
+        
+        # Final throughput based on logical hardware speed
+        mode_efficiency = 0.45 if self.mode == 'cpu' else 0.95
+        throughput = self.system_profile['max_dma_bandwidth'] * mode_efficiency * (self.bus_width / 32)
         
         cpu_stats = self.cpu_simulator.get_statistics()
         dma_stats = self.dma_controller.get_statistics() if self.mode == 'dma' else {}
         
-        # Calculate efficiency
         if self.mode == 'dma':
-            efficiency = 95 - (cpu_stats['active_percentage'] * 0.2)
+            efficiency = 95 - (cpu_stats['active_percentage'] * 0.2) + (self.bus_width / 64 * 5)
         else:
-            efficiency = 40 + (cpu_stats['active_percentage'] * 0.1)
+            efficiency = 35 + (cpu_stats['active_percentage'] * 0.1) - (self.bus_width / 64 * 10)
         
         return {
             'total_time': round(total_time, 3),
             'throughput_mbps': round(throughput, 2),
-            'total_cycles': cpu_stats['total_cycles'],
-            'efficiency': round(efficiency, 2),
+            'total_cycles': int(cpu_stats['total_cycles']),
+            'efficiency': round(min(99.9, efficiency), 2),
             'cpu_stats': cpu_stats,
             'dma_stats': dma_stats,
             'mode': self.mode,
@@ -160,24 +212,15 @@ class SimulationEngine:
         }
     
     def pause_simulation(self):
-        """Pause the simulation"""
         self.paused = True
-    
     def resume_simulation(self):
-        """Resume the simulation"""
         self.paused = False
-    
     def stop_simulation(self):
-        """Stop the simulation"""
         self.active = False
         self.paused = False
-    
     def is_active(self):
-        """Check if simulation is active"""
         return self.active
-    
     def get_status(self):
-        """Get current simulation status"""
         return {
             'active': self.active,
             'paused': self.paused,

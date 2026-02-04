@@ -12,6 +12,18 @@ let currentOS = 'windows';
 let currentMode = 'cpu';
 let systemProfiles = {};
 let currentFileInfo = null;
+let simulationSpeed = 1.0;
+let busWidth = 32;
+
+// Logic Analyzer Data
+let logicAnalyzer = null;
+const signalData = {
+    HOLD: [],
+    HLDA: [],
+    DACK: [],
+    RD: [],
+    WR: []
+};
 
 // Chart data storage
 const chartDataLength = 100;
@@ -26,6 +38,7 @@ const chartData = {
 document.addEventListener('DOMContentLoaded', () => {
     initializeWebSocket();
     initializeCharts();
+    initializeLogicAnalyzer();
     initializeEventListeners();
     loadSystemInfo();
     setupSystemProfiles();
@@ -70,6 +83,7 @@ function initializeWebSocket() {
         simulationActive = true;
         updateStatus('RUNNING', 'active');
         document.getElementById('start-transfer').disabled = true;
+        document.getElementById('trigger-interrupt').disabled = false;
         document.getElementById('pause-transfer').disabled = false;
         document.getElementById('stop-transfer').disabled = false;
         addLogEntry(`Simulation started in ${data.mode.toUpperCase()} mode`, 'info');
@@ -337,7 +351,7 @@ function initializeCharts() {
             labels: ['CPU Only Mode', 'DMA Assisted Mode'],
             datasets: [{
                 label: 'Efficiency (%)',
-                data: [40, 95],
+                data: [0, 0], // Start at zero
                 backgroundColor: [
                     'rgba(239, 68, 68, 0.6)',
                     'rgba(16, 185, 129, 0.6)'
@@ -384,6 +398,7 @@ function initializeCharts() {
                 y: {
                     min: 0,
                     max: 100,
+                    beginAtZero: true,
                     ticks: {
                         color: '#94a3b8',
                         font: {
@@ -410,6 +425,117 @@ function initializeCharts() {
             }
         }
     });
+
+    // Timing Diagram class
+    window.initializeLogicAnalyzer = function () {
+        const canvas = document.getElementById('timing-diagram');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const signals = ['HOLD', 'HLDA', 'DACK', 'RD', 'WR'];
+        const colors = {
+            HOLD: '#ef4444',
+            HLDA: '#f59e0b',
+            DACK: '#10b981',
+            RD: '#3b82f6',
+            WR: '#8b5cf6'
+        };
+
+        logicAnalyzer = {
+            ctx,
+            canvas,
+            signals,
+            colors,
+            data: {},
+            offset: 0,
+            step: 5,
+            init: function () {
+                this.signals.forEach(s => this.data[s] = Array(200).fill(0));
+                this.draw();
+            },
+            update: function (newData) {
+                if (!newData) return;
+                this.signals.forEach(s => {
+                    this.data[s].shift();
+                    this.data[s].push(newData[s] || 0);
+                });
+                this.draw();
+            },
+            draw: function () {
+                const w = this.canvas.width = this.canvas.offsetWidth;
+                const h = this.canvas.height = this.canvas.offsetHeight;
+
+                if (h === 0) return;
+
+                this.ctx.clearRect(0, 0, w, h);
+
+                // 1. Draw Background Grid
+                this.ctx.strokeStyle = '#1e293b';
+                this.ctx.lineWidth = 0.5;
+                for (let i = 0; i < w; i += 50) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(i, 0);
+                    this.ctx.lineTo(i, h);
+                    this.ctx.stroke();
+                }
+
+                // 2. Setup Lane Metrics (Compact for 5 signals)
+                const padding = 8;
+                const availableHeight = h - (padding * 2);
+                const laneHeight = availableHeight / this.signals.length;
+
+                this.signals.forEach((sig, idx) => {
+                    const yTop = padding + (idx * laneHeight);
+                    const yBottom = yTop + laneHeight - 4;
+                    const yScale = laneHeight * 0.55; // Slightly taller signals
+                    const yHigh = yBottom - yScale;
+                    const yLow = yBottom;
+
+                    // Lane separator (more visible)
+                    this.ctx.strokeStyle = '#1e293b';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, yBottom + 2);
+                    this.ctx.lineTo(w, yBottom + 2);
+                    this.ctx.stroke();
+
+                    // 3. Draw Signal Waveform
+                    this.ctx.strokeStyle = this.colors[sig];
+                    this.ctx.lineWidth = 2.2;
+                    this.ctx.beginPath();
+
+                    const data = this.data[sig] || Array(200).fill(0);
+                    for (let i = 0; i < data.length; i++) {
+                        const x = (i / (data.length - 1)) * w;
+                        const val = data[i];
+                        const y = (val > 0) ? yHigh : yLow;
+
+                        if (i === 0) {
+                            this.ctx.moveTo(x, y);
+                        } else {
+                            const prevY = (data[i - 1] > 0) ? yHigh : yLow;
+                            this.ctx.lineTo(x, prevY);
+                            this.ctx.lineTo(x, y);
+                        }
+                    }
+                    this.ctx.stroke();
+
+                    // 4. Draw Label (Aligned to top of lane)
+                    this.ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+                    this.ctx.font = 'bold 9px "JetBrains Mono", monospace';
+                    this.ctx.fillText(sig, 5, yTop + 10);
+                });
+            },
+            reset: function () {
+                this.signals.forEach(s => this.data[s] = Array(200).fill(0));
+                this.draw();
+            }
+        };
+        logicAnalyzer.init();
+
+        // Handle resize
+        window.addEventListener('resize', () => logicAnalyzer.draw());
+    };
 }
 
 /**
@@ -484,7 +610,8 @@ function initializeEventListeners() {
             file_size: fileSizeBytes,
             file_type: fileType,
             mode: currentMode,
-            simulation_speed: simSpeed
+            simulation_speed: simulationSpeed,
+            bus_width: busWidth
         });
 
         console.log('✅ Event emitted successfully!');
@@ -530,6 +657,69 @@ function initializeEventListeners() {
     document.getElementById('log-level').addEventListener('change', (e) => {
         filterLogEntries(e.target.value);
     });
+
+    // Modals
+    const fileModal = document.getElementById('file-details-modal');
+    const closeFileModal = document.getElementById('close-file-modal');
+    const closeFileDetails = document.getElementById('close-file-details');
+
+    closeFileModal.addEventListener('click', () => fileModal.style.display = 'none');
+    closeFileDetails.addEventListener('click', () => fileModal.style.display = 'none');
+
+    // Theory Modal Listeners
+    const theoryModal = document.getElementById('theory-modal');
+    const openTheoryBtn = document.getElementById('open-theory-modal');
+    const closeTheoryIcon = document.getElementById('close-theory-modal');
+    const closeTheoryBtn = document.getElementById('close-theory-btn');
+
+    if (openTheoryBtn) {
+        openTheoryBtn.addEventListener('click', () => {
+            theoryModal.style.display = 'flex';
+            addLogEntry('Viewing System Theory documentation', 'info');
+        });
+    }
+
+    if (closeTheoryIcon) closeTheoryIcon.addEventListener('click', () => theoryModal.style.display = 'none');
+    if (closeTheoryBtn) closeTheoryBtn.addEventListener('click', () => theoryModal.style.display = 'none');
+
+    window.addEventListener('click', (e) => {
+        if (e.target === fileModal) fileModal.style.display = 'none';
+        if (e.target === theoryModal) theoryModal.style.display = 'none';
+    });
+
+    // Simulation Speed Control
+    const simSpeedRange = document.getElementById('sim-speed');
+    const speedValue = document.getElementById('speed-value');
+    if (simSpeedRange) {
+        simSpeedRange.addEventListener('input', (e) => {
+            simulationSpeed = parseFloat(e.target.value);
+            speedValue.textContent = `${simulationSpeed.toFixed(1)}x`;
+        });
+    }
+
+    // Bus Width Control
+    const busWidthSelect = document.getElementById('bus-width');
+    if (busWidthSelect) {
+        busWidthSelect.addEventListener('change', (e) => {
+            busWidth = parseInt(e.target.value);
+            addLogEntry(`Bus width updated to ${busWidth}-bit`, 'info');
+        });
+    }
+
+    // Trigger Interrupt Button
+    const interruptBtn = document.getElementById('trigger-interrupt');
+    if (interruptBtn) {
+        interruptBtn.addEventListener('click', () => {
+            if (simulationActive) {
+                window.globalSocket.emit('trigger_interrupt');
+                addLogEntry('⚠ Hardware interrupt triggered!', 'warning');
+
+                // Shake UI effect
+                document.body.classList.add('shake-effect');
+                setTimeout(() => document.body.classList.remove('shake-effect'), 500);
+            }
+        });
+    }
 }
 
 /**
@@ -764,10 +954,15 @@ function updateMetrics(data) {
     document.getElementById('current-cycles').textContent = data.total_cycles ? data.total_cycles.toLocaleString() : '0';
     document.getElementById('total-cycles').textContent = data.total_cycles ? data.total_cycles.toLocaleString() : '0';
 
+    // Update logic analyzer
+    if (logicAnalyzer && data.signals) {
+        logicAnalyzer.update(data.signals);
+    }
+
     // Calculate estimated time remaining
     if (data.elapsed_time > 0 && data.progress > 0) {
         const estimatedTotalTime = data.elapsed_time / (data.progress / 100);
-        const remainingTime = estimatedTotalTime - data.elapsed_time;
+        const remainingTime = Math.max(0, estimatedTotalTime - data.elapsed_time);
         document.getElementById('estimated-time').textContent = `${remainingTime.toFixed(1)}s`;
     }
 }
@@ -827,6 +1022,7 @@ function handleSimulationComplete(data) {
 function handleSimulationStop() {
     simulationActive = false;
     document.getElementById('start-transfer').disabled = !fileUpload.getCurrentFile();
+    document.getElementById('trigger-interrupt').disabled = true;
     document.getElementById('pause-transfer').disabled = true;
     document.getElementById('stop-transfer').disabled = true;
     document.getElementById('pause-transfer').innerHTML = '<i class="fas fa-pause"></i> Pause';
@@ -961,24 +1157,18 @@ function updateStatus(text, state) {
  * Update Comparison Chart
  */
 function updateComparisonChart(osType) {
-    const cpuEfficiency = {
-        'windows': 38,
-        'linux': 45,
-        'macos': 42,
-        'android': 35
-    };
-    const dmaEfficiency = {
-        'windows': 92,
-        'linux': 96,
-        'macos': 94,
-        'android': 88
-    };
+    // Only update with baseline if we don't have real results yet
+    if (!window.simulationResults.cpu || !window.simulationResults.dma) {
+        const profile = systemProfiles[osType];
+        if (!profile) return;
 
-    charts.comparison.data.datasets[0].data = [
-        cpuEfficiency[osType] || 40,
-        dmaEfficiency[osType] || 95
-    ];
-    charts.comparison.update();
+        // Base values for visualization before running simulations
+        const cpuBaseline = 100 - (profile.cycles_per_byte * 10);
+        const dmaBaseline = 98 - (profile.cycles_per_byte * 1);
+
+        charts.comparison.data.datasets[0].data = [cpuBaseline, dmaBaseline];
+        charts.comparison.update();
+    }
 }
 
 /**

@@ -33,12 +33,12 @@ class DMAController:
         file_complexity = self._get_file_complexity(file_type)
         
         # DMA utilization (percentage of DMA bandwidth used)
-        base_dma_util = 65 + random.uniform(-3, 8) * (chunk_size / 4096)
-        dma_utilization = min(95, base_dma_util * file_complexity)
+        base_dma_util = 75 + random.uniform(-15, 20)
+        dma_utilization = min(98, base_dma_util * file_complexity)
         
         # Bus utilization (DMA and CPU share the bus)
-        base_bus_util = 45 + random.uniform(-5, 10) * (chunk_size / 4096)
-        bus_utilization = min(85, base_bus_util * file_complexity)
+        base_bus_util = 55 + random.uniform(-10, 30)
+        bus_utilization = min(92, base_bus_util * file_complexity)
         
         # CPU cycles saved (DMA does the work, CPU just sets it up)
         cpu_cycles_saved = chunk_size * self.profile['cycles_per_byte'] * 0.88 * file_complexity
